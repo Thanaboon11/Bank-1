@@ -1,0 +1,446 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>FRESH HUB POS PRO - Smart Retail Solution</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+    <!-- Library สำหรับสแกน Barcode/QR Code -->
+    <script src="https://unpkg.com/html5-qrcode"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Kanit:wght@300;400;500;600;700&family=Chakra+Petch:wght@400;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Kanit', sans-serif; background-color: #f0fdf4; }
+        .brand-font { font-family: 'Chakra Petch', sans-serif; }
+        .hidden-view { display: none; }
+        .glass-morphism {
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(12px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+        }
+        .receipt-area {
+            width: 380px;
+            padding: 30px;
+            background: white;
+            color: black;
+            font-family: 'Courier New', Courier, monospace;
+        }
+        #reader { width: 100%; border-radius: 1rem; overflow: hidden; }
+        .scanner-active { border: 4px solid #10b981; animation: pulse 2s infinite; }
+        @keyframes pulse { 0% { opacity: 1; } 50% { opacity: 0.7; } 100% { opacity: 1; } }
+    </style>
+</head>
+<body class="min-h-screen">
+
+    <!-- Navigation -->
+    <nav class="glass-morphism sticky top-0 z-50 px-6 py-4 shadow-sm border-b border-emerald-100 flex justify-between items-center">
+        <div class="flex items-center gap-4">
+            <div class="bg-emerald-600 p-2 rounded-2xl shadow-lg shadow-emerald-200">
+                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 11V7a4 4 0 118 0m-33 11a2 2 0 100 4 2 2 0 000-4zm18 2a2 2 0 100 4 2 2 0 000-4z" />
+                </svg>
+            </div>
+            <span class="text-2xl font-black text-emerald-800 brand-font tracking-tighter">FRESH HUB <span class="text-emerald-500">PRO</span></span>
+        </div>
+        <div class="flex gap-2">
+            <button onclick="switchView('shop')" class="px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-50 transition" id="btn-shop">หน้าร้าน</button>
+            <button onclick="switchView('admin')" class="px-4 py-2 rounded-xl text-sm font-bold hover:bg-emerald-50 transition text-slate-500" id="btn-admin">คลังสินค้า</button>
+            <button onclick="switchView('pos')" class="bg-emerald-600 text-white px-6 py-2 rounded-xl font-bold shadow-md flex items-center gap-2">
+                <span id="cart-count" class="bg-white text-emerald-600 px-2 rounded-lg text-xs">0</span>
+                เช็คบิล
+            </button>
+        </div>
+    </nav>
+
+    <!-- [View 1] Shopping Grid -->
+    <main id="view-shop" class="max-w-7xl mx-auto p-6 animate-in fade-in duration-500">
+        <div class="flex justify-between items-center mb-8">
+            <h2 class="text-3xl font-bold text-emerald-900">รายการอาหาร & สินค้า</h2>
+            <div class="flex gap-2">
+                <input type="text" placeholder="ค้นหา..." class="px-4 py-2 rounded-xl border border-emerald-100 outline-none focus:ring-2 focus:ring-emerald-500">
+            </div>
+        </div>
+        <div id="shop-grid" class="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-6">
+            <!-- Products rendered by JS -->
+        </div>
+    </main>
+
+    <!-- [View 2] Admin / Inventory -->
+    <main id="view-admin" class="max-w-7xl mx-auto p-6 hidden-view animate-in slide-in-from-bottom duration-500">
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            <div class="bg-white p-6 rounded-3xl shadow-xl border border-emerald-50 h-fit">
+                <h3 class="text-xl font-bold mb-4 text-emerald-800">เพิ่มสินค้าใหม่</h3>
+                <div id="admin-scanner-container" class="mb-4 hidden">
+                    <div id="reader-admin"></div>
+                    <button onclick="stopScanner('admin')" class="w-full mt-2 bg-red-100 text-red-600 py-2 rounded-lg text-xs font-bold">ปิดกล้อง</button>
+                </div>
+                <form id="product-form" class="space-y-4">
+                    <div class="flex gap-2">
+                        <input type="text" id="p-barcode" placeholder="รหัส Barcode" class="flex-grow px-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                        <button type="button" onclick="startScanner('admin')" class="bg-emerald-100 p-3 rounded-xl text-emerald-600">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 4v1m6 11h2m-6 0h-2v4m0-11v3m0 0h.01M12 12h4.01M16 20h4M4 12h4m12 0h.01M5 8h2a1 1 0 001-1V5a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1zm12 0h2a1 1 0 001-1V5a1 1 0 00-1-1h-2a1 1 0 00-1 1v2a1 1 0 001 1zM5 20h2a1 1 0 001-1v-2a1 1 0 00-1-1H5a1 1 0 00-1 1v2a1 1 0 001 1z" /></svg>
+                        </button>
+                    </div>
+                    <input type="text" id="p-name" placeholder="ชื่อสินค้า" required class="w-full px-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                    <input type="number" id="p-price" step="0.01" placeholder="ราคา (บาท)" required class="w-full px-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                    <input type="text" id="p-image" placeholder="URL รูปภาพ (ถ้ามี)" class="w-full px-4 py-3 bg-gray-50 rounded-xl outline-none focus:ring-2 focus:ring-emerald-500">
+                    <button type="submit" class="w-full bg-emerald-600 text-white py-4 rounded-xl font-bold hover:bg-emerald-700 transition shadow-lg">บันทึกสินค้าเข้าคลัง</button>
+                </form>
+            </div>
+            <div class="lg:col-span-2 bg-white rounded-3xl shadow-xl overflow-hidden">
+                <table class="w-full text-left">
+                    <thead class="bg-emerald-50 text-emerald-800 text-xs uppercase font-bold">
+                        <tr>
+                            <th class="px-6 py-4">สินค้า</th>
+                            <th class="px-6 py-4">Barcode</th>
+                            <th class="px-6 py-4 text-right">ราคา</th>
+                            <th class="px-6 py-4 text-center">จัดการ</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inventory-list" class="divide-y"></tbody>
+                </table>
+            </div>
+        </div>
+    </main>
+
+    <!-- [View 3] POS Checkout -->
+    <main id="view-pos" class="max-w-7xl mx-auto p-6 hidden-view animate-in zoom-in duration-300">
+        <div class="flex flex-col lg:flex-row gap-8">
+            <div class="flex-grow bg-white rounded-[2.5rem] shadow-2xl overflow-hidden flex flex-col min-h-[600px] border-4 border-emerald-600">
+                <div class="p-8 bg-emerald-600 text-white flex justify-between items-center">
+                    <div>
+                        <h2 class="text-2xl font-bold brand-font">CASHIER TERMINAL</h2>
+                        <p class="text-xs opacity-80">FRESH HUB SMART SYSTEM v2.0</p>
+                    </div>
+                    <button onclick="startScanner('pos')" class="bg-white/20 hover:bg-white/30 p-3 rounded-2xl backdrop-blur-md flex items-center gap-2 transition">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 9a2 2 0 012-2h.93a2 2 0 001.664-.89l.812-1.22A2 2 0 0110.07 4h3.86a2 2 0 011.664.89l.812 1.22A2 2 0 0018.07 7H19a2 2 0 012 2v9a2 2 0 01-2 2H5a2 2 0 01-2-2V9z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 13a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+                        สแกนคิดเงิน
+                    </button>
+                </div>
+                
+                <div class="p-8 flex-grow overflow-y-auto">
+                    <!-- Scanner for POS -->
+                    <div id="pos-scanner-container" class="mb-6 hidden">
+                        <div id="reader-pos" class="scanner-active"></div>
+                        <button onclick="stopScanner('pos')" class="w-full mt-2 bg-red-500 text-white py-2 rounded-xl font-bold">ปิดสแกนเนอร์</button>
+                    </div>
+
+                    <table class="w-full">
+                        <thead class="text-gray-400 text-xs uppercase border-b pb-4">
+                            <tr>
+                                <th class="text-left py-2">รายการ</th>
+                                <th class="text-center py-2">จำนวน</th>
+                                <th class="text-right py-2">รวม (บาท)</th>
+                                <th class="text-center py-2"></th>
+                            </tr>
+                        </thead>
+                        <tbody id="cart-list" class="divide-y">
+                            <!-- Items go here -->
+                        </tbody>
+                    </table>
+                    <div id="empty-cart-view" class="py-20 text-center text-gray-300">
+                        <p class="text-xl font-bold">ยังไม่มีสินค้าในตะกร้า</p>
+                        <p class="text-sm">กรุณาเลือกจากหน้าร้านหรือสแกนสินค้า</p>
+                    </div>
+                </div>
+
+                <div class="p-8 bg-gray-50 border-t flex justify-between items-center">
+                    <button onclick="clearCart()" class="text-red-400 hover:text-red-600 font-bold text-sm">ล้างตะกร้าทั้งหมด</button>
+                    <div class="text-right">
+                        <p class="text-xs text-gray-400 font-bold uppercase">ยอดรวมสุทธิ</p>
+                        <p id="pos-total" class="text-4xl font-black text-emerald-800">0.00</p>
+                    </div>
+                </div>
+            </div>
+
+            <div class="w-full lg:w-96 bg-white p-8 rounded-[2.5rem] shadow-2xl flex flex-col">
+                <h3 class="text-center font-bold text-gray-500 mb-6 uppercase tracking-widest">การชำระเงิน</h3>
+                <div class="bg-emerald-50 p-6 rounded-3xl mb-6 border-2 border-dashed border-emerald-200">
+                    <p class="text-center text-[10px] font-bold text-emerald-600 mb-4">สแกนเพื่อจ่ายเงิน (PROMPTPAY)</p>
+                    <img id="payment-qr" src="https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PENDING" class="mx-auto w-44 h-44 rounded-2xl">
+                </div>
+                <button onclick="openReceipt()" class="w-full bg-emerald-600 text-white py-5 rounded-2xl text-xl font-bold shadow-xl shadow-emerald-100 transform active:scale-95 transition">
+                    ยืนยันการรับเงิน
+                </button>
+            </div>
+        </div>
+    </main>
+
+    <!-- [Modal] Receipt -->
+    <div id="receipt-modal" class="fixed inset-0 bg-black/90 backdrop-blur-sm flex items-center justify-center hidden z-[100] p-4">
+        <div class="flex flex-col items-center">
+            <div id="receipt-content" class="receipt-area shadow-2xl rounded-sm">
+                <div class="text-center mb-6">
+                    <h2 class="text-xl font-bold uppercase brand-font">FRESH HUB PRO</h2>
+                    <p class="text-[10px]">สาขา: สำนักงานใหญ่ (Market District)</p>
+                    <p class="text-[10px]">Tax ID: 0-9999-88888-77-0</p>
+                </div>
+                <div class="text-[10px] mb-4">
+                    <div class="flex justify-between"><span>เลขที่:</span><span id="rec-id">INV-000</span></div>
+                    <div class="flex justify-between"><span>วันที่:</span><span id="rec-date">--/--/--</span></div>
+                </div>
+                <div class="border-b border-dashed border-black my-2"></div>
+                <div id="rec-items" class="text-[10px] space-y-1"></div>
+                <div class="border-b border-dashed border-black my-2"></div>
+                <div class="flex justify-between font-bold text-lg uppercase">
+                    <span>ยอดรวม</span>
+                    <span id="rec-total">0.00</span>
+                </div>
+                <div class="text-center mt-8 text-[8px] italic">
+                    <p>*** ขอบคุณที่มาอุดหนุน ***</p>
+                    <p>Powered by Fresh Hub POS Pro</p>
+                </div>
+            </div>
+            <div class="mt-6 flex gap-3 w-full">
+                <button onclick="downloadReceipt()" class="flex-grow bg-emerald-600 text-white py-4 rounded-2xl font-bold">บันทึกเป็นรูปภาพ</button>
+                <button onclick="closeReceipt()" class="px-6 bg-white/20 text-white rounded-2xl">ปิด</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Store
+        let products = [
+            { id: 1, barcode: "8850001", name: "เบอร์เกอร์เนื้อพรีเมียม", price: 189.00, image: "https://images.unsplash.com/photo-1568901346375-23c9450c58cd?w=400" },
+            { id: 2, barcode: "8850002", name: "พิซซ่าเตาถ่าน", price: 299.00, image: "https://images.unsplash.com/photo-1513104890138-7c749659a591?w=400" },
+            { id: 3, barcode: "8850003", name: "น้ำส้มคั้นสด", price: 65.00, image: "https://images.unsplash.com/photo-1613478223719-2ab802602423?w=400" }
+        ];
+        let cart = [];
+        let html5QrScanner = null;
+
+        // View Switching
+        function switchView(view) {
+            ['shop', 'admin', 'pos'].forEach(v => document.getElementById(`view-${v}`).classList.add('hidden-view'));
+            document.getElementById(`view-${view}`).classList.remove('hidden-view');
+            
+            // UI Feedback for buttons
+            ['shop', 'admin'].forEach(v => {
+                const btn = document.getElementById(`btn-${v}`);
+                if(btn) {
+                    btn.classList.toggle('bg-emerald-50', v === view);
+                    btn.classList.toggle('text-emerald-700', v === view);
+                    btn.classList.toggle('text-slate-500', v !== view);
+                }
+            });
+
+            if(view === 'shop') renderShop();
+            if(view === 'admin') renderAdmin();
+            if(view === 'pos') renderPOS();
+            stopScanner('any');
+        }
+
+        // Scanner Logic
+        function startScanner(target) {
+            const containerId = target === 'admin' ? 'admin-scanner-container' : 'pos-scanner-container';
+            const readerId = target === 'admin' ? 'reader-admin' : 'reader-pos';
+            document.getElementById(containerId).classList.remove('hidden');
+
+            if (html5QrScanner) html5QrScanner.clear();
+
+            html5QrScanner = new Html5Qrcode(readerId);
+            const config = { fps: 10, qrbox: { width: 250, height: 150 } };
+
+            html5QrScanner.start({ facingMode: "environment" }, config, (decodedText) => {
+                if(target === 'admin') {
+                    document.getElementById('p-barcode').value = decodedText;
+                    stopScanner('admin');
+                } else {
+                    scanToCart(decodedText);
+                }
+            });
+        }
+
+        function stopScanner(target) {
+            if(html5QrScanner) {
+                html5QrScanner.stop().then(() => {
+                    if(target === 'admin') document.getElementById('admin-scanner-container').classList.add('hidden');
+                    if(target === 'pos') document.getElementById('pos-scanner-container').classList.add('hidden');
+                }).catch(err => console.log(err));
+            }
+        }
+
+        // Product Logic
+        function renderShop() {
+            const grid = document.getElementById('shop-grid');
+            grid.innerHTML = products.map(p => `
+                <div class="bg-white p-4 rounded-3xl border border-emerald-50 shadow-sm hover:shadow-xl transition-all cursor-pointer group" onclick="addToCart(${p.id})">
+                    <div class="relative overflow-hidden rounded-2xl mb-4 aspect-square">
+                        <img src="${p.image || 'https://via.placeholder.com/300'}" class="w-full h-full object-cover group-hover:scale-110 transition duration-500">
+                    </div>
+                    <h4 class="font-bold text-gray-800 text-sm truncate">${p.name}</h4>
+                    <div class="flex justify-between items-center mt-2">
+                        <p class="text-emerald-600 font-black">${p.price.toFixed(2)} ฿</p>
+                        <div class="bg-emerald-50 p-1.5 rounded-lg opacity-0 group-hover:opacity-100 transition">
+                            <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 6v6m0 0v6m0-6h6m-6 0H6" /></svg>
+                        </div>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        function addToCart(id) {
+            const product = products.find(p => p.id === id);
+            const existing = cart.find(i => i.id === id);
+            if(existing) existing.qty++; else cart.push({...product, qty: 1});
+            updateCartCount();
+        }
+
+        function scanToCart(barcode) {
+            const product = products.find(p => p.barcode === barcode);
+            if(product) {
+                addToCart(product.id);
+                renderPOS();
+                // Play feedback sound here if needed
+            } else {
+                alert("ไม่พบสินค้าที่มีรหัส: " + barcode);
+            }
+        }
+
+        function updateCartCount() {
+            document.getElementById('cart-count').innerText = cart.reduce((s, i) => s + i.qty, 0);
+        }
+
+        // Inventory Logic
+        document.getElementById('product-form').addEventListener('submit', (e) => {
+            e.preventDefault();
+            const barcode = document.getElementById('p-barcode').value;
+            const name = document.getElementById('p-name').value;
+            const price = parseFloat(document.getElementById('p-price').value);
+            const image = document.getElementById('p-image').value || `https://picsum.photos/seed/${Math.random()}/300/300`;
+            
+            products.push({ id: Date.now(), barcode, name, price, image });
+            renderAdmin();
+            e.target.reset();
+        });
+
+        function renderAdmin() {
+            const tbody = document.getElementById('inventory-list');
+            tbody.innerHTML = products.map(p => `
+                <tr class="hover:bg-emerald-50/30 transition">
+                    <td class="px-6 py-4 flex items-center gap-3">
+                        <img src="${p.image}" class="w-10 h-10 rounded-lg object-cover">
+                        <span class="font-bold text-gray-800">${p.name}</span>
+                    </td>
+                    <td class="px-6 py-4 text-xs font-mono text-gray-400">${p.barcode || '-'}</td>
+                    <td class="px-6 py-4 text-right font-black text-emerald-600">${p.price.toFixed(2)}</td>
+                    <td class="px-6 py-4 text-center">
+                        <button onclick="delInventory(${p.id})" class="text-red-300 hover:text-red-500 transition">ลบ</button>
+                    </td>
+                </tr>
+            `).join('');
+        }
+
+        function delInventory(id) {
+            products = products.filter(p => p.id !== id);
+            renderAdmin();
+        }
+
+        // POS Checkout Logic
+        function renderPOS() {
+            const list = document.getElementById('cart-list');
+            const emptyMsg = document.getElementById('empty-cart-view');
+            const totalDisplay = document.getElementById('pos-total');
+            
+            if(cart.length === 0) {
+                list.innerHTML = '';
+                emptyMsg.classList.remove('hidden');
+                totalDisplay.innerText = "0.00";
+                return;
+            }
+
+            emptyMsg.classList.add('hidden');
+            let total = 0;
+            list.innerHTML = cart.map((i, index) => {
+                const sub = i.price * i.qty;
+                total += sub;
+                return `
+                    <tr class="group">
+                        <td class="py-4 font-bold text-gray-800">${i.name}</td>
+                        <td class="py-4 text-center">
+                            <div class="flex items-center justify-center gap-2">
+                                <button onclick="changeQty(${i.id}, -1)" class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">-</button>
+                                <span class="text-sm font-black w-6">${i.qty}</span>
+                                <button onclick="changeQty(${i.id}, 1)" class="w-6 h-6 rounded-full bg-gray-100 flex items-center justify-center text-xs">+</button>
+                            </div>
+                        </td>
+                        <td class="py-4 text-right font-black text-emerald-600">${sub.toFixed(2)}</td>
+                        <td class="py-4 text-right">
+                            <button onclick="removeFromCart(${index})" class="text-red-200 hover:text-red-500 transition">
+                                <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+
+            totalDisplay.innerText = total.toLocaleString(undefined, {minimumFractionDigits: 2});
+            document.getElementById('payment-qr').src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=PROMPTPAY_${total}`;
+        }
+
+        function changeQty(id, delta) {
+            const item = cart.find(i => i.id === id);
+            if(item) {
+                item.qty += delta;
+                if(item.qty <= 0) cart = cart.filter(i => i.id !== id);
+                updateCartCount();
+                renderPOS();
+            }
+        }
+
+        function removeFromCart(index) {
+            cart.splice(index, 1);
+            updateCartCount();
+            renderPOS();
+        }
+
+        function clearCart() {
+            if(confirm("ต้องการล้างรายการทั้งหมดใช่หรือไม่?")) {
+                cart = [];
+                updateCartCount();
+                renderPOS();
+            }
+        }
+
+        // Receipt Logic
+        function openReceipt() {
+            if(cart.length === 0) return;
+            const total = cart.reduce((s, i) => s + (i.price * i.qty), 0);
+            
+            document.getElementById('rec-id').innerText = "INV-" + Date.now().toString().slice(-6);
+            document.getElementById('rec-date').innerText = new Date().toLocaleString('th-TH');
+            document.getElementById('rec-total').innerText = total.toFixed(2);
+            
+            document.getElementById('rec-items').innerHTML = cart.map(i => `
+                <div class="flex">
+                    <span class="flex-grow">${i.name}</span>
+                    <span class="w-8 text-center">${i.qty}</span>
+                    <span class="w-16 text-right">${(i.price * i.qty).toFixed(2)}</span>
+                </div>
+            `).join('');
+
+            document.getElementById('receipt-modal').classList.remove('hidden');
+        }
+
+        function downloadReceipt() {
+            const area = document.getElementById('receipt-content');
+            html2canvas(area, { scale: 3 }).then(canvas => {
+                const link = document.createElement('a');
+                link.download = `Receipt-${Date.now()}.png`;
+                link.href = canvas.toDataURL("image/png");
+                link.click();
+            });
+        }
+
+        function closeReceipt() {
+            document.getElementById('receipt-modal').classList.add('hidden');
+            cart = [];
+            updateCartCount();
+            switchView('shop');
+        }
+
+        // Init
+        renderShop();
+    </script>
+</body>
+</html>
+
